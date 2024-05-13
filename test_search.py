@@ -1,5 +1,4 @@
-from .youtube_search import YoutubeSearch
-
+from .youtube_search import YoutubeSearch, YouTubeFilters
 
 class TestSearch:
 
@@ -10,6 +9,11 @@ class TestSearch:
 
     def test_init_max_results(self):
         search = YoutubeSearch('test', max_results=10)
+        assert 10 == search.max_results
+        assert 10 == len(search.videos)
+
+    def test_init_playlist_max_results(self):
+        search = YoutubeSearch('deep learning', max_results=10, youtube_filter=YouTubeFilters.PLAYLIST)
         assert 10 == search.max_results
         assert 10 == len(search.videos)
 
