@@ -26,5 +26,7 @@ setup(
     ],
     packages=["youtube_search"],
     include_package_data=True,
-    install_requires=["requests"],
+    install_requires=["requests", 
+                      "aiohttp",
+                      ],
 )
