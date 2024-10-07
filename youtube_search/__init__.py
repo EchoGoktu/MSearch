@@ -1,13 +1,20 @@
 import requests
 import urllib.parse
 import json
+import aiohttp
+import asyncio
+from collections.abc import Iterable
 
 
 class YoutubeSearch:
-    def __init__(self, search_terms: str, max_results=None):
+    def __init__(self, search_terms:str|Iterable[str], max_results=None, num_workers=1):
         self.search_terms = search_terms
         self.max_results = max_results
-        self.videos = self._search()
+
+        if isinstance(search_terms, Iterable) and not isinstance(search_terms, str):
+            self.videos = asyncio.run(self._multiple_async_search(num_workers))
+        else:
+            self.videos = self._search()
 
     def _search(self):
         encoded_search = urllib.parse.quote_plus(self.search_terms)
@@ -20,6 +27,67 @@ class YoutubeSearch:
         if self.max_results is not None and len(results) > self.max_results:
             return results[: self.max_results]
         return results
+    
+    async def _async_search(self, query:str|list):
+        async with aiohttp.ClientSession() as session:
+            encoded_search = urllib.parse.quote_plus(query)
+            BASE_URL = "https://youtube.com"
+            url = f"{BASE_URL}/results?search_query={encoded_search}"
+            result = await session.get(url)
+            response = await result.text()
+            while "ytInitialData" not in response:
+                response = await result.text()
+            results = self._parse_html(response)
+            if self.max_results is not None and len(results) > self.max_results:
+                return results[: self.max_results]
+            return results
+    
+    async def _worker(self, query_queue:asyncio.Queue, response_queue:asyncio.Queue):
+        while True:
+
+            # get query
+            query = await query_queue.get()
+
+            # perform task 
+            response = await self._async_search(query)
+
+            # store response 
+            response_queue.put_nowait(response)
+
+            # Notify the queue that the query has been searched
+            query_queue.task_done()
+
+    async def _multiple_async_search(self, num_workers:int):
+        courutine:list[asyncio.Task] = []
+
+        query_queue = asyncio.Queue()
+        response_queue = asyncio.Queue()
+
+        # putting queries in queue
+        for query in self.search_terms:
+            query_queue.put_nowait(query)
+
+        # assigning jobs 
+        for _ in range(num_workers):
+            task = asyncio.create_task(self._worker(query_queue, response_queue))
+            courutine.append(task)
+
+        await query_queue.join()
+
+        # cancel the worker tasks
+        for task in courutine:
+            task.cancel()
+        
+        await asyncio.gather(*courutine, return_exceptions=True)
+
+        # Retrieve results from the response queue
+        results:list[list] = []
+        while not response_queue.empty():
+            result = await response_queue.get()
+            results.append(result)
+        
+        return results
+
 
     def _parse_html(self, response):
         results = []
@@ -59,7 +127,12 @@ class YoutubeSearch:
         return result
 
     def to_json(self, clear_cache=True):
-        result = json.dumps({"videos": self.videos})
+        if isinstance(self.search_terms, Iterable):
+            input_dict = {query:video for query, video in zip(self.search_terms, self.videos)}
+            result = json.dumps(input_dict)
+        else:
+            result = json.dumps({"videos": self.videos})
+
         if clear_cache:
             self.videos = ""
         return result
