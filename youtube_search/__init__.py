@@ -46,7 +46,7 @@ class YoutubeSearch:
                     res["views"] = video_data.get("viewCountText", {}).get("simpleText", 0)
                     res["publish_time"] = video_data.get("publishedTimeText", {}).get("simpleText", 0)
                     res["url_suffix"] = video_data.get("navigationEndpoint", {}).get("commandMetadata", {}).get("webCommandMetadata", {}).get("url", None)
-                    res["yt_url"] = f"https://youtube.com{res["url_suffix"]}"
+                    res["yt_url"] = f"https://youtube.com{res['url_suffix']}"
                     results.append(res)
 
             if results:
